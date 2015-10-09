@@ -24,75 +24,77 @@ import org.eclipse.mat.ui.snapshot.views.inspector.NamedReferenceNode;
 import org.eclipse.mat.util.VoidProgressListener;
 
 public class memoryLeakTool {
+    private static boolean DEBUG = true;
+    private static String CURRENT_DIR = System.getProperty("user.dir");
+    private static String OUTPUT_DIR = CURRENT_DIR;
+    private static String INPUT_FILE = "";
+    private static int MIN_BITMAP_SIZE = 10000;
+
     private static memoryLeakTool instance = null;
     private static ISnapshot snapshot = null;
-    protected static List<Object> cache = new ArrayList<Object>();
+    private static List<Object> cache = new ArrayList<Object>();
 
     public static void main(String[] args) {
-        System.out.println("Welcome to memoryLeak tool");
+        if (!parseArguments(args)) {
+            System.out.println("Usage:");
+            System.out.println("    memoryLeakTool -i [input file] -o(optional) [output dir] -m(optional) [min bitmap size to dump] -d(optional to debug) [true|false]");
+            return;
+        }
+
+        print("Welcome to memoryLeak tool");
+        print("Current dir:" + System.getProperty("user.dir"));
+
         instance = new memoryLeakTool();
-        File file = new File("/home/ritter/Desktop/Hprof/mem");
+        File file = new File(INPUT_FILE);
+//        File file = new File("/home/ritter/Desktop/Hprof/mem");
         try {
         	snapshot = instance.openSnapshot(file);
         	int[] objects = snapshot.getGCRoots();
         	for(int id : objects) {
                 IObject o = snapshot.getObject(id);
 
-                
-
                 if (snapshot.isArray(id)) {
-                    System.out.println("The object type is " + o.getDisplayName() );
+                    print("The object type is " + o.getDisplayName() );
                     int[] inboundRefererIds = snapshot.getInboundRefererIds(id);
                     for (int inboundRefererId: inboundRefererIds) {
                         IObject inboundRefererObjectBuffer = snapshot.getObject(inboundRefererId);
-                        System.out.println("--inboundRefererObjectBuffer:" + inboundRefererObjectBuffer.getDisplayName() );
+                        print("--inboundRefererObjectBuffer:" + inboundRefererObjectBuffer.getDisplayName() );
 
-                        System.out.println("============================");
+                        print("============================");
                         IInstance instance = (IInstance)inboundRefererObjectBuffer;
                         fixObjectReferences(snapshot, cache, instance.getFields(), false, false);
                         for (Object object: cache) {
-//                            if (object instanceof Integer) {
-//                                System.out.println("cache int:" + (Integer)object);
-//                            } else if (object instanceof String) {
-//                                System.out.println("cache String:" + (String)object);
-//                            } else {
-                                System.out.println("cache Object:" + object);
-//                            }
+                            print("cache Object:" + object);
                         }
-                        System.out.println("=============================");
+                        print("=============================");
 
                         int[] inboundRefererBufferIds = snapshot.getInboundRefererIds(inboundRefererId);
                         for (int inboundRefererBufferId: inboundRefererBufferIds) {
                             IObject inboundRefererObjectBitmap = snapshot.getObject(inboundRefererBufferId);
-                            System.out.println("----inboundRefererObjectBitmap:" + inboundRefererObjectBitmap.getDisplayName() );
+                            print("----inboundRefererObjectBitmap:" + inboundRefererObjectBitmap.getDisplayName() );
                         }
 
                         int[] outboundRefererBufferIds = snapshot.getOutboundReferentIds(inboundRefererId);
                         for (int outboundRefererBufferId: outboundRefererBufferIds) {
                             if (snapshot.isArray(outboundRefererBufferId)) {
-                                IObject outboundRefererObjectBitmap = snapshot.getObject(outboundRefererBufferId);
-                                System.out.println("----outboundRefererObjectBitmap:" + outboundRefererObjectBitmap.getDisplayName());
-                                System.out.println("----outboundRefererObjectBitmap RetainedHeapSize:" + outboundRefererObjectBitmap.getRetainedHeapSize());
-                                System.out.println("----outboundRefererObjectBitmap UsedHeapSize:" + outboundRefererObjectBitmap.getUsedHeapSize());
+                                IObject outboundRefererObjectBuffer = snapshot.getObject(outboundRefererBufferId);
+                                print("----outboundRefererObjectBuffer:" + outboundRefererObjectBuffer.getDisplayName());
+                                print("----outboundRefererObjectBuffer RetainedHeapSize:" + outboundRefererObjectBuffer.getRetainedHeapSize());
+                                print("----outboundRefererObjectBuffer UsedHeapSize:" + outboundRefererObjectBuffer.getUsedHeapSize());
 
                                 int width = (Integer)instance.getField("mWidth").getValue();
                                 int height = (Integer)instance.getField("mHeight").getValue();
-                                System.out.println("----instance.mWidth:" +  width + ",instance.mHeight:" + height);
-                                
-                                if (outboundRefererObjectBitmap.getUsedHeapSize() > 10000) {
-                                    writeRawData(outboundRefererBufferId, outboundRefererObjectBitmap.getObjectId() + "_" + outboundRefererObjectBitmap.getUsedHeapSize() + "_"
-                                            + width + "*" + height + "_");
+                                String displayName = outboundRefererObjectBuffer.getDisplayName();
+                                String address = outboundRefererObjectBuffer.getDisplayName().substring(displayName.indexOf("@") + 2, displayName.indexOf("@") + 12);
+                                print("----instance.mWidth:" +  width + ",instance.mHeight:" + height + ",address:" + address);
+                                if (outboundRefererObjectBuffer.getUsedHeapSize() > MIN_BITMAP_SIZE) {
+                                    writeRawData(outboundRefererBufferId, address + "_" + outboundRefererObjectBuffer.getUsedHeapSize() + "_"
+                                            + width + "*" + height);
                                 }
                             }
                         }
                     }
-
-//                    System.out.println("The object type is " + o.resolveValue(field) );
-//                    System.out.println("The object type is " + o.getObjectAddress() );
-//                    System.out.println("The object type is " + o.getObjectAddress() );
                 }
-                //System.out.println("The object type is " + snapshot.isArray(id) );
-                //System.out.println("The object type is " + o.getDisplayName() );
         	}
         } catch (Exception e) {
             e.printStackTrace();
@@ -107,10 +109,10 @@ public class memoryLeakTool {
     }
 
     private static void writeRawData(int objectId, String fileName) throws Exception {
-        System.out.println("writeRawData objectId:" + objectId + ",fileName:" + fileName);
+        print("writeRawData objectId:" + objectId + ",fileName:" + fileName);
         IObject object = snapshot.getObject(objectId);
         IPrimitiveArray array = (IPrimitiveArray) object;
-        File file = new File("/home/ritter/Desktop/" + fileName + ".rgba");
+        File file = new File(OUTPUT_DIR + "/" + fileName + ".rgba");
         FileOutputStream out = null;
 
         try
@@ -188,7 +190,6 @@ public class memoryLeakTool {
                         default:
                             throw new SnapshotException("1111");
                     }
-
                     offset += read;
                 }
 
@@ -211,8 +212,9 @@ public class memoryLeakTool {
     protected List<Object> cache = new ArrayList<Object>();
     fixObjectReferences(object.getSnapshot(), cache, object.getFields(), false, false);
     (IInstance) object
-*/
-    protected static void fixObjectReferences(ISnapshot snapshot,
+     */
+
+    private static void fixObjectReferences(ISnapshot snapshot,
             List<Object> appendTo, List<Field> fields, boolean areStatics,
             boolean showPseudoStatics) {
         for (int ii = 0; ii < fields.size(); ii++) {
@@ -237,5 +239,43 @@ public class memoryLeakTool {
                 appendTo.add(new FieldNode(field, areStatics));
             }
         }
-}
+    }
+
+    private static void print(String x) {
+        if (DEBUG) {
+            System.out.println(x);
+        }
+    }
+
+    private static boolean parseArguments(String[] args) {
+        try {
+            for (int i = 0; i < args.length; ++i) {
+                if ("-i".equals(args[i])) {
+                    ++i;
+                    INPUT_FILE = args[i];
+                    System.out.println("INPUT_FILE:" + INPUT_FILE);
+                } else if ("-o".equals(args[i])) {
+                    ++i;
+                    OUTPUT_DIR = args[i];
+                    System.out.println("OUTPUT_DIR:" + OUTPUT_DIR);
+                } else if ("-m".equals(args[i])) {
+                    ++i;
+                    MIN_BITMAP_SIZE = Integer.parseInt(args[i]);
+                    System.out.println("MIN_BITMAP_SIZE:" + MIN_BITMAP_SIZE);
+                } else if ("-d".equals(args[i])) {
+                    ++i;
+                    DEBUG = Boolean.parseBoolean(args[i]);
+                    System.out.println("DEBUG:" + DEBUG);
+                }
+            }
+            System.out.println();
+            if (INPUT_FILE.isEmpty()) {
+                return false;
+            }
+        } catch (Exception e) {
+            System.out.println("Exception:" + e.getMessage());
+            return false;
+        }
+        return true;
+    }
 }
