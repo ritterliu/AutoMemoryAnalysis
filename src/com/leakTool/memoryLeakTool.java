@@ -6,6 +6,7 @@ import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,12 +42,13 @@ public class memoryLeakTool {
             return;
         }
 
-        print("Welcome to memoryLeak tool");
+        print("Welcome to memoryLeak tool v1.0");
         print("Current dir:" + System.getProperty("user.dir"));
 
         instance = new memoryLeakTool();
         File file = new File(INPUT_FILE);
 //        File file = new File("/home/ritter/Desktop/Hprof/mem");
+        boolean noException = true;
         try {
         	snapshot = instance.openSnapshot(file);
         	int[] objects = snapshot.getGCRoots();
@@ -89,7 +91,7 @@ public class memoryLeakTool {
                                 print("----instance.mWidth:" +  width + ",instance.mHeight:" + height + ",address:" + address);
                                 if (outboundRefererObjectBuffer.getUsedHeapSize() > MIN_BITMAP_SIZE) {
                                     writeRawData(outboundRefererBufferId, address + "_" + outboundRefererObjectBuffer.getUsedHeapSize() + "_"
-                                            + width + "*" + height);
+                                            + width + "*" + height, ".rgba");
                                 }
                             }
                         }
@@ -97,7 +99,14 @@ public class memoryLeakTool {
                 }
         	}
         } catch (Exception e) {
+            print("main Exception e:" + e.getMessage());
+            if ("SnapshotFactoryImpl_Error_NoParserRegistered".equalsIgnoreCase(e.getMessage())) {
+                noException = false;
+                createExceptionFlag("NoParserRegistered");
+            }
             e.printStackTrace();
+        } finally {
+            print("main noException:" + noException);
         }
     }
 
@@ -108,11 +117,11 @@ public class memoryLeakTool {
         return factory.openSnapshot(heapDumpFile, args, listener);
     }
 
-    private static void writeRawData(int objectId, String fileName) throws Exception {
+    private static void writeRawData(int objectId, String fileName, String postfix) throws Exception {
         print("writeRawData objectId:" + objectId + ",fileName:" + fileName);
         IObject object = snapshot.getObject(objectId);
         IPrimitiveArray array = (IPrimitiveArray) object;
-        File file = new File(OUTPUT_DIR + "/" + fileName + ".rgba");
+        File file = new File(OUTPUT_DIR + "/" + fileName + postfix);
         FileOutputStream out = null;
 
         try
@@ -204,6 +213,32 @@ public class memoryLeakTool {
         {
             if (out != null) {
                 out.close();
+            }
+        }
+    }
+
+    private static void createExceptionFlag(String fileName){
+        print("createExceptionFlagd:" + ",fileName:" + fileName);
+        File file = new File(OUTPUT_DIR + "/" + fileName);
+        FileOutputStream out = null;
+
+        try
+        {
+            out = new FileOutputStream(file);
+            DataOutputStream writer = new DataOutputStream(new BufferedOutputStream(out));
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } finally {
+            if (out != null) {
+                try {
+                    out.close();
+                } catch (IOException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
             }
         }
     }
