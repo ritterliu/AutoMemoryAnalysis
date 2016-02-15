@@ -42,7 +42,7 @@ public class memoryLeakTool {
             return;
         }
 
-        print("Welcome to memoryLeak tool v1.0");
+        print("Welcome to memoryLeak tool v1.1");
         print("Current dir:" + System.getProperty("user.dir"));
 
         instance = new memoryLeakTool();
@@ -54,13 +54,21 @@ public class memoryLeakTool {
         	int[] objects = snapshot.getGCRoots();
         	for(int id : objects) {
                 IObject o = snapshot.getObject(id);
-
-                if (snapshot.isArray(id)) {
+                /**
+                 * Only parse byte[] to get bitmap
+                 * */
+                if (snapshot.isArray(id) && o.getDisplayName().startsWith("byte[")) {
                     print("The object type is " + o.getDisplayName() );
                     int[] inboundRefererIds = snapshot.getInboundRefererIds(id);
                     for (int inboundRefererId: inboundRefererIds) {
                         IObject inboundRefererObjectBuffer = snapshot.getObject(inboundRefererId);
                         print("--inboundRefererObjectBuffer:" + inboundRefererObjectBuffer.getDisplayName() );
+
+                        if (inboundRefererObjectBuffer.getDisplayName().startsWith("android.graphics.Bitmap")) {
+                        } else {
+                            print("--inboundRefererObjectBuffer DisplayName not android.graphics.Bitmap, continue:");
+                            continue;
+                        }
 
                         print("============================");
                         IInstance instance = (IInstance)inboundRefererObjectBuffer;
